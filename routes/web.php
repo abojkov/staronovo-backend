@@ -34,18 +34,20 @@ $router->group(['prefix' => 'api'], function($router){
 
 
     $router->group(['prefix' => 'users', 'middleware' => 'auth'], function($router){
-        $router->get('test', 'UserController@test');
-
         $router->get('', 'UserController@getAll');
         $router->get('search', 'UserController@get');
         $router->put('{id}', 'UserController@update');
         $router->delete('{id}', 'UserController@delete');
-
-        $router->get('/timeline', 'UserController@timeline');
+        $router->post('profile', 'UserController@getProfile');
+        $router->get('timeline', 'UserController@timeline');
     });
 
     $router->group(['prefix' => 'follow', 'middleware' => 'auth'], function($router){
         $router->post('toggle', 'FollowController@toggleFollow');
+    });
+
+    $router->group(['prefix' => 'favourites', 'middleware' => 'auth'], function($router){
+        $router->post('toggle', 'FacouriteController@toggleFavourite');
     });
 
     $router->group(['prefix' => 'posts', 'middleware' => 'auth'], function($router){
@@ -64,8 +66,6 @@ $router->group(['prefix' => 'api'], function($router){
         $router->post('/confirm/{id}', 'PurchaseController@confirm');
         $router->post('/rate/{id}', 'PurchaseController@rate');
     });
-
-    $router->post('profile', 'UserController@getProfile');
 
 
     $router->get('cities', 'CityController@getAll');

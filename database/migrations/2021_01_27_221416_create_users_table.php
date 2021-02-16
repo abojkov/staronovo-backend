@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 
 class CreateUsersTable extends Migration
@@ -31,12 +32,14 @@ class CreateUsersTable extends Migration
         DB::table('users')->insert(
             array([
                 'username' => 'admin',
-                'password' => '$2y$12$s.g63wejlelYkusgtoSbceZUNTIx748Sk97M0D6JX0h28ZfLtzoB.',
+                'password' => Hash::make('admin'),
                 'email' => 'admin@staronovo.mk',
                 'name' => 'Admin',
                 'surname' => 'Admin',
                 'role_id' => 1,
-                'is_active' => 1
+                'is_active' => 1,
+                'created_at' => \Carbon\Carbon::now(),
+                'updated_at' => \Carbon\Carbon::now()
             ])
         );
     }

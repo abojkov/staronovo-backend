@@ -10,28 +10,21 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
 use App;
+use PDOException;
 
 class UserController extends Controller
 {
-    public function test(){
-        $item = User::find(1);
-        return response()->json($item->role);
-    }
 
-    /*
-     * @return: List of users
-     */
     public function getAll(){
-        return $this->jsonReponse(User::all());
+        $users = User::all();
+
+        foreach ($users as $user){
+            unset($user['password']);
+        }
+
+        return response()->json($users);
     }
 
-    /*
-     * Request contains:
-     *  Required:
-     *      @username   string
-     *
-     * @return: User (searched bu username)
-     */
     public function get(Request $request){
         // Validation
         $this->validate($request, [
@@ -39,23 +32,11 @@ class UserController extends Controller
         ], \ValidatorMessages::messages);
 
         // ID за админ е 1
-        $item = User::where('username', 'LIKE', '%'.$request['username'].'%')->where('role_id', '!=', 1)->get();
+        $item = User::select('id', 'username', 'name', 'surname')->where('username', 'LIKE', '%'.$request['username'].'%')->where('role_id', '!=', 1)->where('is_active', '=', 1)->get();
 
         return response()->json($item);
     }
 
-    /*
-     * Request contains:
-     *  Required:
-     *      @username   string
-     *      @email      string
-     *      @password   string
-     *      @repeatPass string
-     *      @name       string
-     *      @surname    string
-     *
-     * @return: User (newly created)
-     */
     public function create(Request $request){
         // Validation
         $validator = Validator::make($request->all(), [
@@ -98,24 +79,15 @@ class UserController extends Controller
         return response()->json($item, 201);
     }
 
-    /*
-     * Request contains:
-     *  Required:
-     *      none
-     *  Optional:
-     *      @email      string
-     *      @password   string
-     *      @newPass    string
-     *      @repeatPass string
-     *      @name       string
-     *      @surname    string
-     *      @is_active  boolean
-     *  Forbidden:
-     *      @username   The username must not be changed
-     *
-     * @return: User (updated)
-     */
     public function update($id, Request $request){
+        if(AuthController::internal_getLoggedInUser()['id'] != $id){
+            return response()->json(array('message' => 'Немате пристап до овој дел од веб апликацијата!'), 401);
+        }
+
+        if(count($request->all()) == 0){
+            return response()->json(array('message' => 'Не постојат информации кои можат да се променат!'), 422);
+        }
+
         $updated = $this->internal_populateUser($id, $request->all());
         $errors = $updated['errors'];
         $updated = $updated['item']->getAttributes();
@@ -125,31 +97,46 @@ class UserController extends Controller
             return response()->json($errors, 422);
         }
 
+
         // Insert
-        $item = User::findOrFail($id);
+        $item = User::find($id);
         $item->update($updated);
+
         return response()->json($item, 200);
     }
 
-    /*
-     * @return: string (Global message)
-     */
     public function delete($id){
-        $item = User::find($id);
-
-        if($item == null){
-            return response(array('global_message' => 'Ресурсот не постои!'), 404);
+        if(AuthController::internal_getLoggedInUser()['id'] != $id){
+            return response()->json(array('message' => 'Немате пристап до овој дел од веб апликацијата!'), 401);
         }
 
-        $item->delete();
-        return response(array('global_message' => 'Успешно избришан запис!'), 200);
+        $item = User::find($id);
+
+        try{
+            $item->delete();
+        } catch (PDOException $e){
+            $item['is_active'] = 0;
+            $item->update();
+            return response()->json(array('message' => 'Не може да се избрише поради завистности во други релации! Затоа корисникот е деактивиран!'), 200);
+        }
+
+        return response(array('message' => 'Успешно избришан запис!'), 200);
     }
 
-    /*
-     *
-     */
     public function getProfile(Request $request){
+        $validator = Validator::make($request->all(), [
+            'username' => 'required'
+        ], \ValidatorMessages::messages);
+
+        if(sizeof($validator->errors()) > 0){
+            return response()->json($validator->errors(), 422);
+        }
+
         $item = User::where('username', '=', $request['username'])->first();
+
+        if($item == null){
+            return response()->json(array('message' => 'Ресурсот не постои!'), 404);
+        }
 
         if(AuthController::internal_getLoggedInUser()->role->role != $item->role->role)
             if($item->role->role == 'ROLE_ADMIN')
@@ -185,48 +172,60 @@ class UserController extends Controller
 
     /* --------- INTERNAL FUNCTIONS --------- */
     private function internal_populateUser($id, $params){
-        $item = $this->internal_getById($id);
+        $item = User::find($id);
         $keys = array_keys($params);
-        $forbidden = array('username');
+        $forbidden = array('id', 'role_id', 'created_at', 'updated_at');
         $errors = array();
 
         foreach($keys as $key){
-            if($item[$key]==null || in_array($item[$key], $forbidden))
+            if($item[$key]==null || in_array($key, $forbidden))
                 continue;
 
-            if($key=='password' && $params['newPass']!=null && $params['repeatPass']!=null) {
-                if($params[$key] == $item['password']){
+            if($key=='password' && in_array('newPass', $keys) && in_array('repeatPass', $keys)) {
+                if(password_verify($params[$key], $item['password'])){
                     // Точно внесен стар пасворд
                     if($params['newPass'] == $params['repeatPass']){
                         // Новите две лозинки се исти
-                        $item[$key] = $params['newPass'];
-                    } else {
+                        $item['password'] = Hash::make($params['newPass']);
+                        continue;
+                    } else{
                         // Новите две лозинки се различни
                         $errors += ['repeatPass' => 'Внесените нови лозинки не се совпаѓаат!'];
                     }
                 } else {
                     // Погрешно внесен стар пасворд
-                    $errors += ['password' => 'Внесетана лозинка не е точна!'];
+                    $errors += ['password' => 'Внесената лозинка не е точна!'];
                 }
 
                 continue;
             }
 
-            // Further validation
-            if(User::where('email', '=', mb_strtolower($params['email']))->first() != null){
-                // Постои оваа email адреса
-                $errors += [
-                    'email' => 'Email адресата постои!'
-                ];
+            if($key == 'email'){
+                // Further validation
+                if(User::where('email', '=', mb_strtolower($params['email']))->first() != null){
+                    // Постои оваа email адреса
+                    $errors += [
+                        'email' => 'Email адресата постои!'
+                    ];
+                    continue;
+                }
+            }
+
+            if($key == 'username'){
+                // Further validation
+                if(User::where('username', '=', mb_strtolower($params['username']))->first() != null){
+                    // Постои овој username
+                    $errors += [
+                        'username' => 'Корисничкото име постои!'
+                    ];
+                    continue;
+                }
             }
 
             $item[$key] = $params[$key];
         }
 
         return ['item' => $item, 'errors' => $errors ];
-    }
-    private function internal_getById($id){
-        return User::find($id);
     }
     private function internal_getPostsForUser($id){
         $items = Post::with(['category'])->where('seller_id', '=', $id)->orderBy('datetime_posted', 'DESC')->get();

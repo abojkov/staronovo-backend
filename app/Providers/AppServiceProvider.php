@@ -15,8 +15,4 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->register(\Tymon\JWTAuth\Providers\LumenServiceProvider::class);
     }
-
-//    public function boot(){
-//        date_default_timezone_set('Europe/Skopje');
-//    }
 }

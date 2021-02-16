@@ -11,6 +11,6 @@ class CityController extends Controller
      * @return: List of cities
      */
     public function getAll(){
-        return $this->jsonReponse(City::all());
+        return response()->json(City::all());
     }
 }
