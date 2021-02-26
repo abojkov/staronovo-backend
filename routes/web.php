@@ -47,7 +47,8 @@ $router->group(['prefix' => 'api'], function($router){
     });
 
     $router->group(['prefix' => 'favourites', 'middleware' => 'auth'], function($router){
-        $router->post('toggle', 'FacouriteController@toggleFavourite');
+        $router->get('', 'FavouriteController@getAll');
+        $router->post('toggle', 'FavouriteController@toggleFavourite');
     });
 
     $router->group(['prefix' => 'posts', 'middleware' => 'auth'], function($router){

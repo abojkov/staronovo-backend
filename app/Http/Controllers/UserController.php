@@ -163,8 +163,13 @@ class UserController extends Controller
             return response()->json($listOfUsersThatThisLoggedInUserFollows, 200);
 
         $finalListOfPosts = Post::whereIn('seller_id', $listOfFollowingIDs)->where('quantity_left', '>', 0)->with('category')->orderBy('datetime_posted', 'DESC')->get();
+        $listOfFavouritePosts = FavouriteController::internal_getAllOnlyPostIDs();
         foreach ($finalListOfPosts as $post){
             $post['seller_username'] = User::find($post['seller_id'])->username;
+            if(in_array($post['id'], $listOfFavouritePosts))
+                $post['is_favourite'] = true;
+            else
+                $post['is_favourite'] = false;
         }
 
         return response()->json($finalListOfPosts, 200);
